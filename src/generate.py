@@ -36,10 +36,11 @@ def load_model(ckpt_path, device):
     return model.eval(), schedule, ckpt
 
 
-def run(model, diffusion, ev, labels, steps, cfg, cg, seed, cg_fn):
+def run(model, diffusion, ev, labels, steps, cfg, cg, seed, cg_fn, t_start):
     gen = torch.Generator(device=labels.device).manual_seed(seed)
     return diffusion.sample(
-        model, labels, steps=steps, cfg_scale=cfg, classifier_grad=cg_fn if cg > 0 else None, cg_scale=cg, generator=gen
+        model, labels, steps=steps, cfg_scale=cfg, classifier_grad=cg_fn if cg > 0 else None, cg_scale=cg,
+        generator=gen, t_start=t_start,
     )
 
 
@@ -52,6 +53,11 @@ def main():
     p.add_argument("--cfg", type=float, default=2.0)
     p.add_argument("--cg", type=float, default=0.0, help="classifier guidance weight (0 = off)")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument(
+        "--t-start", type=int, default=960,
+        help="first sampling timestep; the cosine schedule's alpha_bar at t=999 is ~2e-9, which "
+        "amplifies x0 errors ~20000x and leaves residual noise, so sampling starts slightly later",
+    )
     p.add_argument("--sweep-cfg", default="", help="comma-separated CFG scales to compare, e.g. 1,1.5,2,3,4")
     p.add_argument("--sweep-cg", default="", help="comma-separated classifier-guidance weights to compare")
     p.add_argument("--auto-best", action="store_true", help="use the best swept setting for the final outputs")
@@ -68,12 +74,14 @@ def main():
         for name in ("test", "new_test")
     }
     os.makedirs(args.out, exist_ok=True)
-    results = {"checkpoint_epoch": ckpt.get("epoch"), "steps": args.steps, "seed": args.seed, "sweeps": []}
+    results = {
+        "checkpoint_epoch": ckpt.get("epoch"), "steps": args.steps, "seed": args.seed, "t_start": args.t_start, "sweeps": [],
+    }
 
     def evaluate_setting(cfg, cg):
         accs = {}
         for name, labels in conditions.items():
-            accs[name] = score(ev, run(model, diffusion, ev, labels, args.steps, cfg, cg, args.seed, cg_fn), labels)
+            accs[name] = score(ev, run(model, diffusion, ev, labels, args.steps, cfg, cg, args.seed, cg_fn, args.t_start), labels)
         row = {"cfg": cfg, "cg": cg, **accs, "mean": (accs["test"] + accs["new_test"]) / 2}
         print(json.dumps(row), flush=True)
         results["sweeps"].append(row)
@@ -90,7 +98,7 @@ def main():
     results["final_cfg"], results["final_cg"] = cfg, cg
 
     for name, labels in conditions.items():
-        imgs = run(model, diffusion, ev, labels, args.steps, cfg, cg, args.seed, cg_fn)
+        imgs = run(model, diffusion, ev, labels, args.steps, cfg, cg, args.seed, cg_fn, args.t_start)
         acc = score(ev, imgs, labels)
         results[name] = acc
         img_dir = os.path.join(args.out, "images", name)
@@ -104,7 +112,7 @@ def main():
     gen = torch.Generator(device=device).manual_seed(args.seed)
     final, traj = diffusion.sample(
         model, label, steps=args.steps, cfg_scale=cfg, classifier_grad=cg_fn if cg > 0 else None, cg_scale=cg,
-        generator=gen, return_trajectory=True,
+        generator=gen, return_trajectory=True, t_start=args.t_start,
     )
     idx = torch.linspace(0, len(traj) - 1, 10).round().long().tolist()
     frames = torch.cat([traj[i] for i in idx])
@@ -116,7 +124,7 @@ def main():
     print("=" * 50)
     print(f"Evaluator accuracy  test.json:     {results['test']:.4f}")
     print(f"Evaluator accuracy  new_test.json: {results['new_test']:.4f}")
-    print(f"(cfg={cfg}, cg={cg}, DDIM steps={args.steps}, seed={args.seed}, epoch={results['checkpoint_epoch']})")
+    print(f"(cfg={cfg}, cg={cg}, DDIM steps={args.steps}, t_start={args.t_start}, seed={args.seed}, epoch={results['checkpoint_epoch']})")
     print("=" * 50, flush=True)
 
 

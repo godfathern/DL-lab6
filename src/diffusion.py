@@ -62,6 +62,8 @@ class Diffusion:
         cg_scale=0.0,
         generator=None,
         return_trajectory=False,
+        clip_x0=True,
+        t_start=None,
     ):
         """DDIM sampling (eta=0 deterministic, eta=1 matches DDPM ancestral sampling).
 
@@ -72,22 +74,28 @@ class Diffusion:
         device = labels.device
         n = labels.shape[0]
         x = torch.randn(n, 3, 64, 64, device=device, generator=generator)
-        timesteps = torch.linspace(self.T - 1, 0, steps, device=device).round().long()
+        first = self.T - 1 if t_start is None else t_start
+        timesteps = torch.linspace(first, 0, steps, device=device).round().long()
         trajectory = [x.clone()]
         for i, t in enumerate(timesteps):
             t_batch = t.repeat(n)
             ab_t = self.alpha_bar[t]
             ab_prev = self.alpha_bar[timesteps[i + 1]] if i + 1 < steps else torch.tensor(1.0, device=device)
             eps = self.guided_eps(model, x, t_batch, labels, cfg_scale).float()
-            x0 = ((x - (1 - ab_t).sqrt() * eps) / ab_t.sqrt()).clamp(-1, 1)
+            x0 = (x - (1 - ab_t).sqrt() * eps) / ab_t.sqrt()
+            if clip_x0:
+                x0 = x0.clamp(-1, 1)
             if classifier_grad is not None and cg_scale > 0:
                 # Gradient w.r.t. the predicted clean image, mapped to x_t through
                 # dx0/dx_t ~ 1/sqrt(alpha_bar_t) (the U-Net Jacobian is ignored).
                 with torch.enable_grad():
                     grad = classifier_grad(x0.detach(), labels) / ab_t.sqrt()
                 eps = eps - cg_scale * (1 - ab_t).sqrt() * grad
-                x0 = ((x - (1 - ab_t).sqrt() * eps) / ab_t.sqrt()).clamp(-1, 1)
-            eps = (x - ab_t.sqrt() * x0) / (1 - ab_t).sqrt()
+                x0 = (x - (1 - ab_t).sqrt() * eps) / ab_t.sqrt()
+                if clip_x0:
+                    x0 = x0.clamp(-1, 1)
+            if clip_x0:
+                eps = (x - ab_t.sqrt() * x0) / (1 - ab_t).sqrt()
             sigma = eta * ((1 - ab_prev) / (1 - ab_t) * (1 - ab_t / ab_prev)).clamp(min=0).sqrt()
             noise = torch.randn(x.shape, device=device, generator=generator) if i + 1 < steps else 0
             x = ab_prev.sqrt() * x0 + (1 - ab_prev - sigma**2).clamp(min=0).sqrt() * eps + sigma * noise

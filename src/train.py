@@ -38,8 +38,9 @@ def evaluate_both(ema, diffusion, ev, conditions, steps, cfg_scale, seed=0):
     gen = torch.Generator(device=next(ema.parameters()).device).manual_seed(seed)
     accs = {}
     for name, labels in conditions.items():
-        # Start at t=960: the cosine schedule's alpha_bar at t=999 (~2e-9) leaves residual noise.
-        imgs = diffusion.sample(ema, labels, steps=steps, cfg_scale=cfg_scale, generator=gen, t_start=960)
+        # Samples from t=999, as in the reported training run. The final outputs start at
+        # t=960 instead (generate.py --t-start), which removes the residual noise.
+        imgs = diffusion.sample(ema, labels, steps=steps, cfg_scale=cfg_scale, generator=gen)
         accs[name] = score(ev, imgs, labels)
     return accs
 

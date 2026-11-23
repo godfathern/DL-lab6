@@ -50,6 +50,8 @@ run(
     "--time-budget-hours", str(TIME_BUDGET_HOURS),
     "--batch-size", "64",
 )
+# Settings of the original Kaggle run (t=999 back then). The submitted images were
+# regenerated afterwards from best.pt with generate.py's defaults (100 steps, t=960, CFG 4).
 run(
     "generate.py",
     "--ckpt", os.path.join(out_dir, "best.pt"),

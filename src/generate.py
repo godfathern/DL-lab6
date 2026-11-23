@@ -49,8 +49,8 @@ def main():
     p.add_argument("--ckpt", required=True)
     p.add_argument("--files-dir", required=True)
     p.add_argument("--out", default="outputs/final")
-    p.add_argument("--steps", type=int, default=250, help="DDIM steps (1000 = full DDPM length)")
-    p.add_argument("--cfg", type=float, default=2.0)
+    p.add_argument("--steps", type=int, default=100, help="DDIM steps (1000 = full DDPM length)")
+    p.add_argument("--cfg", type=float, default=4.0, help="classifier-free guidance scale")
     p.add_argument("--cg", type=float, default=0.0, help="classifier guidance weight (0 = off)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument(

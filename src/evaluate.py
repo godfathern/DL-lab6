@@ -9,9 +9,9 @@ def load_evaluator(files_dir, device):
     """Return an evaluation_model instance from the provided evaluator.py.
 
     The provided class hard-codes the checkpoint path './checkpoint.pth' and calls .cuda(),
-    so it is constructed from inside files_dir. Without CUDA (local Mac smoke tests), the
-    same architecture and weights are built on another device using the same class, so
-    compute_acc and eval are still the provided ones.
+    so it is constructed from inside files_dir. Without CUDA (e.g. the Apple-silicon Mac
+    used for the final sampling), the same architecture and weights are built on another
+    device using the same class, so compute_acc and eval are still the provided ones.
     """
     # PyTorch >= 2.6 defaults torch.load to weights_only=True; this env var restores the
     # old default for the evaluator's own torch.load call without editing the file.

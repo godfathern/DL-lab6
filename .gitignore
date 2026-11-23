@@ -7,3 +7,6 @@ data/
 outputs/
 *.npz
 results/
+DL_LAB6_*.zip
+report/*.pdf
+!report/figures/*.pdf
